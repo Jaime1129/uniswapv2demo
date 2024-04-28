@@ -25,6 +25,8 @@ contract ZUniSwapV2Pair is ERC20, Math {
 
     uint256 constant MINIMUM_LIQUIDITY = 1000;
 
+    bool private isEntered;
+
     address public token0;
     address public token1;
 
@@ -43,6 +45,15 @@ contract ZUniSwapV2Pair is ERC20, Math {
 
     constructor() ERC20("ZUniSwapV2Pair", "ZUNIV2", 18) {}
 
+    modifier nonReentrant() {
+        require(!isEntered);
+        isEntered = true;
+
+        _;
+
+        isEntered = false;
+    }
+
     function initialize(address _token0, address _token1) public {
         if (token0 != address(0) || token1 != address(0)) {
             revert AlreadyInitialized();
@@ -51,7 +62,12 @@ contract ZUniSwapV2Pair is ERC20, Math {
         token1 = _token1;
     }
 
-    event Burn(address indexed sender, uint256 amount0, uint256 amount1, address to);
+    event Burn(
+        address indexed sender,
+        uint256 amount0,
+        uint256 amount1,
+        address to
+    );
     event Mint(address indexed sender, uint256 amount0, uint256 amount1);
     event Sync(uint256 reserve0, uint256 reserve1);
     event Swap(
@@ -98,7 +114,9 @@ contract ZUniSwapV2Pair is ERC20, Math {
         emit Mint(to, amount0, amount1);
     }
 
-    function burn(address to) public returns (uint256 amount0, uint256 amount1) {
+    function burn(
+        address to
+    ) public returns (uint256 amount0, uint256 amount1) {
         uint256 balance0 = IERC20(token0).balanceOf(address(this));
         uint256 balance1 = IERC20(token1).balanceOf(address(this));
         // bug: burn user token without permission
@@ -128,7 +146,11 @@ contract ZUniSwapV2Pair is ERC20, Math {
         emit Burn(msg.sender, amount0, amount1, to);
     }
 
-    function swap(uint256 amount0Out, uint256 amount1Out, address to) public {
+    function swap(
+        uint256 amount0Out,
+        uint256 amount1Out,
+        address to
+    ) public nonReentrant {
         if (amount0Out <= 0 || amount1Out <= 0) {
             revert InsufficientOutputAmount();
         }
@@ -155,9 +177,8 @@ contract ZUniSwapV2Pair is ERC20, Math {
 
         if (
             balance0Adjusted * balance1Adjusted <
-            uint256(reserve0_) * uint256(reserve1_) * (1000**2)
+            uint256(reserve0_) * uint256(reserve1_) * (1000 ** 2)
         ) revert InvalidK();
-        
 
         _update(balance0, balance1, reserve0_, reserve1_);
 

@@ -16,11 +16,11 @@ contract TestUser {
         ERC20(token0Address_).transfer(pairAddress_, amount0_);
         ERC20(token1Address_).transfer(pairAddress_, amount1_);
 
-        ZUniSwapV2Pair(pairAddress_).mint();
+        ZUniSwapV2Pair(pairAddress_).mint(address(this));
     }
 
     function withdrawLiquidity(address pairAddress_) public {
-        ZUniSwapV2Pair(pairAddress_).burn();
+        ZUniSwapV2Pair(pairAddress_).burn(address(this));
     }
 }
 
@@ -46,7 +46,7 @@ contract ZUniSwapV2PairTest is Test {
         token0.transfer(address(pair), 1 ether);
         token1.transfer(address(pair), 1 ether);
 
-        pair.mint();
+        pair.mint(address(this));
 
         // check LP token amount
         assertEq(pair.balanceOf(address(this)), 1 ether - 1000);
@@ -58,7 +58,7 @@ contract ZUniSwapV2PairTest is Test {
         token0.transfer(address(pair), 1 ether);
         token1.transfer(address(pair), 1 ether);
 
-        pair.mint();
+        pair.mint(address(this));
 
         // check LP token amount
         assertEq(pair.balanceOf(address(this)), 1 ether - 1000);
@@ -68,7 +68,7 @@ contract ZUniSwapV2PairTest is Test {
         token0.transfer(address(pair), 3 ether);
         token1.transfer(address(pair), 2 ether);
 
-        pair.mint();
+        pair.mint(address(this));
 
         assertEq(pair.balanceOf(address(this)), 3 ether - 1000);
         assertReserve(4 ether, 3 ether);
@@ -83,8 +83,9 @@ contract ZUniSwapV2PairTest is Test {
 
     function testBurn() public {
         testMintBootstrap();
-
-        pair.burn();
+        
+        pair.transferFrom(msg.sender, address(pair), pair.balanceOf(address(this)));
+        pair.burn(address(this));
 
         assertEq(pair.totalSupply(), 1000);
         assertEq(pair.balanceOf(address(this)), 0);
@@ -111,13 +112,14 @@ contract ZUniSwapV2PairTest is Test {
         token1.transfer(address(pair), 1 ether);
 
         // total LP tokens = 2 ether. 1 ether to test user, 1 ether to this.
-        pair.mint(); 
+        pair.mint(address(this)); 
 
         assertEq(pair.balanceOf(address(this)), 1 ether);
         assertEq(pair.totalSupply(), 2 ether);
         assertReserve(3 ether, 2 ether);
 
-        pair.burn();
+        pair.transferFrom(msg.sender, address(pair), pair.balanceOf(address(this)));
+        pair.burn(address(this));
 
         assertEq(pair.balanceOf(address(this)), 0);
         assertEq(pair.totalSupply(), 1 ether);
