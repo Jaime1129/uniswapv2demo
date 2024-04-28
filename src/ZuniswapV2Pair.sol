@@ -21,6 +21,7 @@ contract ZUniSwapV2Pair is ERC20, Math {
     error InvalidK();
     error BalanceOverflow();
     error AlreadyInitialized();
+    error InsufficientInputAmount();
 
     uint256 constant MINIMUM_LIQUIDITY = 1000;
 
@@ -140,9 +141,23 @@ contract ZUniSwapV2Pair is ERC20, Math {
         uint256 balance1 = IERC20(token1).balanceOf(address(this)) - amount1Out;
 
         // the new constant K must equal or larger than current one
-        if (balance0 * balance1 < uint256(reserve0_) * uint256(reserve1_)) {
-            revert InvalidK();
-        }
+        uint256 amount0In = balance0 > reserve0 - amount0Out
+            ? balance0 - (reserve0 - amount0Out)
+            : 0;
+        uint256 amount1In = balance1 > reserve1 - amount1Out
+            ? balance1 - (reserve1 - amount1Out)
+            : 0;
+        if (amount0In == 0 && amount1In == 0) revert InsufficientInputAmount();
+
+        // Adjusted = balance before swap - swap fee; fee stays in the contract
+        uint256 balance0Adjusted = (balance0 * 1000) - (amount0In * 3);
+        uint256 balance1Adjusted = (balance1 * 1000) - (amount1In * 3);
+
+        if (
+            balance0Adjusted * balance1Adjusted <
+            uint256(reserve0_) * uint256(reserve1_) * (1000**2)
+        ) revert InvalidK();
+        
 
         _update(balance0, balance1, reserve0_, reserve1_);
 
