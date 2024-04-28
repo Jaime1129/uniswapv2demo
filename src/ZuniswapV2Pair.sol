@@ -11,17 +11,16 @@ interface IERC20 {
     function transfer(address to, uint256 amount) external;
 }
 
-error InsufficientLiquidityMinted();
-error InsufficientLiquidityBurned();
-error TransferFailed();
-error InsufficientOutputAmount();
-error InsufficientLiquidity();
-error InvalidK();
-error BalanceOverflow();
-error AlreadyInitialized();
-
 contract ZUniSwapV2Pair is ERC20, Math {
     using UQ112x112 for uint224;
+    error InsufficientLiquidityMinted();
+    error InsufficientLiquidityBurned();
+    error TransferFailed();
+    error InsufficientOutputAmount();
+    error InsufficientLiquidity();
+    error InvalidK();
+    error BalanceOverflow();
+    error AlreadyInitialized();
 
     uint256 constant MINIMUM_LIQUIDITY = 1000;
 
@@ -34,7 +33,7 @@ contract ZUniSwapV2Pair is ERC20, Math {
     uint112 private reserve0;
     uint112 private reserve1;
     // timestamp of last swapping
-    // this variable is packed together with reserve0 and reserve1 
+    // this variable is packed together with reserve0 and reserve1
     uint32 private blockTimestampLast;
 
     // delta price * time elapsed since last swapping
@@ -54,54 +53,58 @@ contract ZUniSwapV2Pair is ERC20, Math {
     event Burn(address indexed sender, uint256 amount0, uint256 amount1);
     event Mint(address indexed sender, uint256 amount0, uint256 amount1);
     event Sync(uint256 reserve0, uint256 reserve1);
-    event Swap(address indexed sender, uint256 amount0, uint256 amount1, address to);
+    event Swap(
+        address indexed sender,
+        uint256 amount0,
+        uint256 amount1,
+        address to
+    );
 
     // mint LP tokens when adding liquidity
-    function mint() public {
+    // by receiving address as parameter, it supports caller to add liquidity on behalf of another address
+    function mint(address to) public returns (uint256 liquidity) {
+        (uint112 reserve0_, uint112 reserve1_) = getReserves();
         // query current contract balance of both tokens
         uint256 balance0 = IERC20(token0).balanceOf(address(this));
         uint256 balance1 = IERC20(token1).balanceOf(address(this));
 
         // amount are newly depoited tokens that haven't been counted into reserves
-        uint256 amount0 = balance0 - reserve0;
-        uint256 amount1 = balance1 - reserve1;
-
-        uint256 liquidity;
+        uint256 amount0 = balance0 - reserve0_;
+        uint256 amount1 = balance1 - reserve1_;
 
         // calculate the LP tokens that must be issued to LP
         if (totalSupply == 0) {
             // if no LP tokens so far, mint the geo mean of deposited amounts
-            liquidity = sqrt(amount0*amount1) - MINIMUM_LIQUIDITY;
+            liquidity = sqrt(amount0 * amount1) - MINIMUM_LIQUIDITY;
             // remove some initial liquidity to prevent someone from making LP token too expensive
             _mint(address(0), MINIMUM_LIQUIDITY);
         } else {
             liquidity = min(
-                (amount0*totalSupply)/reserve0,
-                (amount1*totalSupply)/reserve1
+                (amount0 * totalSupply) / reserve0_,
+                (amount1 * totalSupply) / reserve1_
             );
         }
 
         if (liquidity <= 0) {
             // the initally provided tokens amount cannot be too small
             revert InsufficientLiquidityMinted();
-        } 
+        }
 
         // distribute LP tokens to LP
-        _mint(msg.sender, liquidity);
-        (uint112 reserve0_, uint112 reserve1_) = getReserves();
+        _mint(to, liquidity);
         _update(balance0, balance1, reserve0_, reserve1_);
 
-        emit Mint(msg.sender, amount0, amount1);
+        emit Mint(to, amount0, amount1);
     }
 
     function burn() public {
         uint256 balance0 = IERC20(token0).balanceOf(address(this));
         uint256 balance1 = IERC20(token1).balanceOf(address(this));
-        // bug: burn user token without permission 
+        // bug: burn user token without permission
         uint256 liquidity = balanceOf[msg.sender];
-        
-        uint256 amount0 = liquidity * balance0 / totalSupply;
-        uint256 amount1 = liquidity * balance1 / totalSupply;
+
+        uint256 amount0 = (liquidity * balance0) / totalSupply;
+        uint256 amount1 = (liquidity * balance1) / totalSupply;
 
         if (amount0 <= 0 || amount1 <= 0) {
             revert InsufficientLiquidityBurned();
@@ -109,7 +112,7 @@ contract ZUniSwapV2Pair is ERC20, Math {
 
         // burn LP tokens
         _burn(msg.sender, liquidity);
-        
+
         // transfer tokens back to user
         _safeTranser(token0, msg.sender, amount0);
         _safeTranser(token1, msg.sender, amount1);
@@ -124,11 +127,7 @@ contract ZUniSwapV2Pair is ERC20, Math {
         emit Burn(msg.sender, amount0, amount1);
     }
 
-    function swap(
-        uint256 amount0Out,
-        uint256 amount1Out,
-        address to
-    ) public {
+    function swap(uint256 amount0Out, uint256 amount1Out, address to) public {
         if (amount0Out <= 0 || amount1Out <= 0) {
             revert InsufficientOutputAmount();
         }
@@ -153,18 +152,22 @@ contract ZUniSwapV2Pair is ERC20, Math {
         emit Swap(msg.sender, amount0Out, amount1Out, to);
     }
 
-    function getReserves() public view returns (uint112 _reserve0, uint112 _reserve1) {
+    function getReserves()
+        public
+        view
+        returns (uint112 _reserve0, uint112 _reserve1)
+    {
         _reserve0 = reserve0;
         _reserve1 = reserve1;
     }
 
     //
     // PRIVATE
-    // 
+    //
 
     // update reserve amount
     function _update(
-        uint256 balance0, 
+        uint256 balance0,
         uint256 balance1,
         uint112 reserve0_,
         uint112 reserve1_
@@ -173,14 +176,18 @@ contract ZUniSwapV2Pair is ERC20, Math {
             revert BalanceOverflow();
         }
 
-        // The unchecked block in Solidity allows developers to bypass these automatic overflow and underflow checks within the scope of the block. 
-        // This can be useful for optimizing gas costs in situations where the developer is certain that overflows or underflows cannot occur, 
+        // The unchecked block in Solidity allows developers to bypass these automatic overflow and underflow checks within the scope of the block.
+        // This can be useful for optimizing gas costs in situations where the developer is certain that overflows or underflows cannot occur,
         // or when such conditions are intended or managed manually.
         unchecked {
             uint32 timeElapsed = uint32(block.timestamp) - blockTimestampLast;
             if (timeElapsed > 0 && reserve0_ > 0 && reserve1_ > 0) {
-                price0CumulativeLast += uint256(UQ112x112.encode(reserve1_).uqdiv(reserve0_)) * timeElapsed;
-                price1CumulativeLast += uint256(UQ112x112.encode(reserve0_).uqdiv(reserve1_)) * timeElapsed;
+                price0CumulativeLast +=
+                    uint256(UQ112x112.encode(reserve1_).uqdiv(reserve0_)) *
+                    timeElapsed;
+                price1CumulativeLast +=
+                    uint256(UQ112x112.encode(reserve0_).uqdiv(reserve1_)) *
+                    timeElapsed;
             }
         }
 
@@ -191,13 +198,21 @@ contract ZUniSwapV2Pair is ERC20, Math {
         emit Sync(reserve0, reserve1);
     }
 
-    // transfer tokens 
-    function _safeTranser(address token, address receiver, uint256 amount) internal {
-        (bool success, bytes memory data) = token.call(abi.encodeWithSignature("transfer(address,uint256)", receiver, amount));
-        if(!success || (data.length != 0 && !abi.decode(data, (bool)))) {
+    // transfer tokens
+    function _safeTranser(
+        address token,
+        address receiver,
+        uint256 amount
+    ) internal {
+        (bool success, bytes memory data) = token.call(
+            abi.encodeWithSignature(
+                "transfer(address,uint256)",
+                receiver,
+                amount
+            )
+        );
+        if (!success || (data.length != 0 && !abi.decode(data, (bool)))) {
             revert TransferFailed();
         }
     }
-
 }
-
