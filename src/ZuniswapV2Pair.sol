@@ -50,7 +50,7 @@ contract ZUniSwapV2Pair is ERC20, Math {
         token1 = _token1;
     }
 
-    event Burn(address indexed sender, uint256 amount0, uint256 amount1);
+    event Burn(address indexed sender, uint256 amount0, uint256 amount1, address to);
     event Mint(address indexed sender, uint256 amount0, uint256 amount1);
     event Sync(uint256 reserve0, uint256 reserve1);
     event Swap(
@@ -97,25 +97,25 @@ contract ZUniSwapV2Pair is ERC20, Math {
         emit Mint(to, amount0, amount1);
     }
 
-    function burn() public {
+    function burn(address to) public returns (uint256 amount0, uint256 amount1) {
         uint256 balance0 = IERC20(token0).balanceOf(address(this));
         uint256 balance1 = IERC20(token1).balanceOf(address(this));
         // bug: burn user token without permission
-        uint256 liquidity = balanceOf[msg.sender];
+        uint256 liquidity = balanceOf[address(this)];
 
-        uint256 amount0 = (liquidity * balance0) / totalSupply;
-        uint256 amount1 = (liquidity * balance1) / totalSupply;
+        amount0 = (liquidity * balance0) / totalSupply;
+        amount1 = (liquidity * balance1) / totalSupply;
 
-        if (amount0 <= 0 || amount1 <= 0) {
+        if (amount0 == 0 || amount1 == 0) {
             revert InsufficientLiquidityBurned();
         }
 
         // burn LP tokens
-        _burn(msg.sender, liquidity);
+        _burn(address(this), liquidity);
 
         // transfer tokens back to user
-        _safeTranser(token0, msg.sender, amount0);
-        _safeTranser(token1, msg.sender, amount1);
+        _safeTranser(token0, to, amount0);
+        _safeTranser(token1, to, amount1);
 
         // update reserve
         balance0 = IERC20(token0).balanceOf(address(this));
@@ -124,7 +124,7 @@ contract ZUniSwapV2Pair is ERC20, Math {
         (uint112 reserve0_, uint112 reserve1_) = getReserves();
         _update(balance0, balance1, reserve0_, reserve1_);
 
-        emit Burn(msg.sender, amount0, amount1);
+        emit Burn(msg.sender, amount0, amount1, to);
     }
 
     function swap(uint256 amount0Out, uint256 amount1Out, address to) public {
