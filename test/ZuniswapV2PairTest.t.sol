@@ -33,7 +33,8 @@ contract ZUniSwapV2PairTest is Test {
     function setUp() public {
         token0 = new ERC20Mintable("Token A", "TKNA");
         token1 = new ERC20Mintable("Token B", "TKNB");
-        pair = new ZUniSwapV2Pair(address(token0), address(token1));
+        pair = new ZUniSwapV2Pair();
+        pair.initialize(address(token0), address(token1));
         testUser = new TestUser();
         token0.mint(10 ether, address(testUser));
         token1.mint(10 ether, address(testUser));

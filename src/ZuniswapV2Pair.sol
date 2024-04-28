@@ -18,6 +18,7 @@ error InsufficientOutputAmount();
 error InsufficientLiquidity();
 error InvalidK();
 error BalanceOverflow();
+error AlreadyInitialized();
 
 contract ZUniSwapV2Pair is ERC20, Math {
     using UQ112x112 for uint224;
@@ -28,16 +29,24 @@ contract ZUniSwapV2Pair is ERC20, Math {
     address public token1;
 
     // pool reserve of tokens for avoiding price manipulation
+    // why uint112? these two reserves can be packed in single storage slot (less than 32 bytes in total),
+    // so everytime reading both variables only need one SLOAD, which saves a lot of gas
     uint112 private reserve0;
     uint112 private reserve1;
-
     // timestamp of last swapping
+    // this variable is packed together with reserve0 and reserve1 
     uint32 private blockTimestampLast;
+
     // delta price * time elapsed since last swapping
     uint256 public price0CumulativeLast;
     uint256 public price1CumulativeLast;
 
-    constructor(address _token0, address _token1) ERC20("ZUniSwapV2Pair", "ZUNIV2", 18) {
+    constructor() ERC20("ZUniSwapV2Pair", "ZUNIV2", 18) {}
+
+    function initialize(address _token0, address _token1) public {
+        if (token0 != address(0) || token1 != address(0)) {
+            revert AlreadyInitialized();
+        }
         token0 = _token0;
         token1 = _token1;
     }
@@ -79,7 +88,8 @@ contract ZUniSwapV2Pair is ERC20, Math {
 
         // distribute LP tokens to LP
         _mint(msg.sender, liquidity);
-        _update(balance0, balance1);
+        (uint112 reserve0_, uint112 reserve1_) = getReserves();
+        _update(balance0, balance1, reserve0_, reserve1_);
 
         emit Mint(msg.sender, amount0, amount1);
     }
@@ -169,8 +179,8 @@ contract ZUniSwapV2Pair is ERC20, Math {
         unchecked {
             uint32 timeElapsed = uint32(block.timestamp) - blockTimestampLast;
             if (timeElapsed > 0 && reserve0_ > 0 && reserve1_ > 0) {
-                price0CumulativeLast = uint256(UQ112x112.encode(reserve1_).uqdiv(reserve0_)) * timeElapsed;
-                price1CumulativeLast = uint256(UQ112x112.encode(reserve0_).uqdiv(reserve1_)) * timeElapsed;
+                price0CumulativeLast += uint256(UQ112x112.encode(reserve1_).uqdiv(reserve0_)) * timeElapsed;
+                price1CumulativeLast += uint256(UQ112x112.encode(reserve0_).uqdiv(reserve1_)) * timeElapsed;
             }
         }
 
